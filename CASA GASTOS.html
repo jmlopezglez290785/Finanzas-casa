@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finanzas del Hogar</title>
+  
+  <!-- Configuración de aplicación instalable en móvil (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#059669">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2830/2830284.png">
+
+  <!-- Estilos y Supabase -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex justify-center items-center p-2 sm:p-4 font-sans select-none">
+
+  <main class="w-full max-w-sm bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col h-[820px] relative">
+    
+    <!-- Cabecera -->
+    <header class="p-4 bg-emerald-600 flex justify-between items-center text-white shadow-md">
+      <div>
+        <h1 class="font-bold text-base leading-tight">Finanzas del Hogar</h1>
+        <p class="text-[11px] text-emerald-100 opacity-90">Control en directo con ingresos y gastos dinámicos</p>
+      </div>
+      <span id="estado-conexion" class="text-[10px] font-semibold bg-emerald-800 px-2.5 py-1 rounded-full flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> En Vivo
+      </span>
+    </header>
+
+    <!-- Contenedor con Scroll -->
+    <section class="flex-1 overflow-y-auto p-4 space-y-4">
+      
+      <!-- PESTAÑA 1: GASTOS Y BALANCE -->
+      <div id="vista-gastos" class="tab-content active space-y-4">
+        
+        <!-- INGRESOS MÚLTIPLES (Nomina 1, Nomina 2, FN, INVIED) -->
+        <article class="bg-slate-800 p-3.5 rounded-2xl border border-emerald-500/40 shadow space-y-2.5">
+          <div class="flex justify-between items-center">
+            <h2 class="text-xs uppercase text-emerald-400 font-bold tracking-wider">💶 Ingresos Mensuales</h2>
+            <span id="txt-total-ingresos" class="text-sm font-black text-emerald-300">0,00 €</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-center" id="grid-ingresos">
+            <!-- Rellenado con Nomina 1, Nomina 2, FN, INVIED -->
+          </div>
+        </article>
+
+        <!-- PANEL DE SALDOS Y RESTANTE EN TIEMPO REAL -->
+        <article class="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow space-y-2.5">
+          <div class="grid grid-cols-2 gap-2 text-center">
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-700/50">
+              <p class="text-[10px] text-slate-400">Total Presupuestado</p>
+              <p id="txt-presupuesto" class="text-base font-extrabold text-slate-200">0,00 €</p>
+            </div>
+            <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-700/50">
+              <p class="text-[10px] text-slate-400">Ya Cobrado</p>
+              <p id="txt-cobrado" class="text-base font-extrabold text-rose-400">0,00 €</p>
+            </div>
+          </div>
+
+          <!-- SALDO RESTANTE REAL -->
+          <div class="bg-slate-950 p-3 rounded-xl border border-emerald-500/40 text-center">
+            <p class="text-[11px] text-slate-300 font-semibold">Dinero Restante en Cuenta AHORA</p>
+            <p id="txt-remanente-actual" class="text-2xl font-black text-emerald-400">0,00 €</p>
+            <p id="txt-remanente-final" class="text-[10px] text-slate-400 mt-1">Al terminar el mes quedarán: 0,00 €</p>
+          </div>
+        </article>
+
+        <!-- LISTADO DE GASTOS CON EDICIÓN Y BORRADO -->
+        <article class="space-y-2">
+          <div class="flex justify-between items-center px-1">
+            <h2 class="text-xs uppercase text-slate-400 font-bold">Listado de Gastos</h2>
+            <div class="flex gap-2">
+              <button onclick="abrirModalNuevoGasto()" class="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition">➕ Añadir</button>
+              <button onclick="reiniciarMes()" class="text-[11px] text-slate-400 hover:text-rose-400 transition">Reiniciar Mes</button>
+            </div>
+          </div>
+          <div id="contenedor-gastos" class="space-y-2"></div>
+        </article>
+      </div>
+
+      <!-- PESTAÑA 2: AJUSTAR COBRO REAL -->
+      <div id="vista-nuevo" class="tab-content space-y-4">
+        <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 space-y-3">
+          <h2 class="text-sm font-bold text-emerald-400">Ajustar Cobro Bancario</h2>
+          <p class="text-xs text-slate-400 leading-relaxed">Selecciona el gasto si el importe cobrado fue distinto al presupuestado:</p>
+          
+          <select id="sel-gasto-ajuste" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"></select>
+
+          <div>
+            <label class="block text-[11px] text-slate-300 mb-1">Importe Exacto Cargado (€)</label>
+            <input type="number" step="0.01" id="in-importe-ajuste" placeholder="Ej: 82.50" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white">
+          </div>
+
+          <button type="button" onclick="aplicarCobroReal()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm py-2.5 rounded-xl shadow transition">
+            Guardar y Marcar Cobrado
+          </button>
+        </div>
+      </div>
+
+      <!-- PESTAÑA 3: CONEXIÓN SUPABASE -->
+      <div id="vista-config" class="tab-content space-y-4">
+        <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 space-y-3">
+          <h2 class="text-sm font-bold text-amber-400">Sincronización en Directo</h2>
+          <p class="text-xs text-slate-400">Introduce las credenciales de Supabase para ver los datos compartidos al segundo:</p>
+          
+          <div>
+            <label class="block text-[11px] text-slate-300 mb-1">Project URL</label>
+            <input type="text" id="cfg-url" placeholder="https://tu-id.supabase.co" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-300 mb-1">Anon / Public Key</label>
+            <input type="text" id="cfg-key" placeholder="sb_publishable_..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+
+          <button onclick="guardarConfiguracionSupabase()" class="w-full bg-amber-600 hover:bg-amber-500 font-bold text-xs py-2.5 rounded-xl transition">
+            Guardar y Sincronizar
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- MODAL 1: NOTAS / EXCEL -->
+    <div id="modal-detalle" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 id="modal-titulo" class="font-bold text-sm text-emerald-400">Detalle del Gasto</h3>
+          <button onclick="cerrarModalDetalle()" class="text-slate-400 hover:text-white font-bold text-lg">&times;</button>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-300 mb-1">En qué se va el dinero (tickets / conceptos):</label>
+          <textarea id="modal-notas" rows="4" placeholder="Ej: Compra semanal 85€, farmacia 12€..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-300 mb-1">Enlace a Google Sheets / Excel (opcional):</label>
+          <input type="url" id="modal-link" placeholder="https://docs.google.com/spreadsheets/..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+          <a id="btn-abrir-excel" href="#" target="_blank" class="hidden text-[10px] text-sky-400 underline mt-1 block">↗ Abrir hoja de cálculo</a>
+        </div>
+
+        <button onclick="guardarModalDetalle()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-xs py-2 rounded-xl transition">
+          Guardar Notas
+        </button>
+      </div>
+    </div>
+
+    <!-- MODAL 2: AÑADIR O EDITAR GASTO -->
+    <div id="modal-editar-gasto" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 id="modal-gasto-titulo" class="font-bold text-sm text-emerald-400">Editar Gasto</h3>
+          <button onclick="cerrarModalEditarGasto()" class="text-slate-400 hover:text-white font-bold text-lg">&times;</button>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-300 mb-1">Nombre del Gasto</label>
+          <input type="text" id="modal-gasto-nombre" placeholder="Ej: MOTO" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-300 mb-1">Importe Presupuestado (€)</label>
+          <input type="number" step="0.01" id="modal-gasto-importe" placeholder="100.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <button onclick="guardarEdicionGasto()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-xs py-2.5 rounded-xl transition">
+          Guardar Cambios
+        </button>
+      </div>
+    </div>
+
+    <!-- Menú inferior -->
+    <nav class="bg-slate-950 p-2 flex justify-around border-t border-slate-800 text-xs">
+      <button type="button" onclick="window.irA('gastos')" id="btn-tab-gastos" class="flex flex-col items-center py-1 text-emerald-400 font-bold">
+        <span class="text-base">💳</span><span>Gastos</span>
+      </button>
+      <button type="button" onclick="window.irA('nuevo')" id="btn-tab-nuevo" class="flex flex-col items-center py-1 text-slate-400">
+        <span class="text-base">✍️</span><span>Ajustar</span>
+      </button>
+      <button type="button" onclick="window.irA('config')" id="btn-tab-config" class="flex flex-col items-center py-1 text-slate-400">
+        <span class="text-base">⚙️</span><span>Ajustes</span>
+      </button>
+    </nav>
+
+  </main>
+
+  <script>
+    // Registro de Service Worker para habilitar la instalación nativa en Android/iOS
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+
+    window.irA = function(tab) {
+      ['gastos', 'nuevo', 'config'].forEach(t => {
+        const v = document.getElementById('vista-' + t);
+        const b = document.getElementById('btn-tab-' + t);
+        if (v) {
+          if (t === tab) { v.classList.add('active'); v.style.display = 'block'; }
+          else { v.classList.remove('active'); v.style.display = 'none'; }
+        }
+        if (b) {
+          b.className = (t === tab) ? 'flex flex-col items-center py-1 text-emerald-400 font-bold' : 'flex flex-col items-center py-1 text-slate-400';
+        }
+      });
+    };
+
+    const GASTOS_BASE = [
+      { id: 'casa', nombre: 'CASA', importe: 440, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'prestamo', nombre: 'PRESTAMO', importe: 240, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'seguro_casa', nombre: 'SEGURO CASA', importe: 40, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'hacienda', nombre: 'HACIENDA', importe: 50, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'internet_movil', nombre: 'INTERNET/MOVIL', importe: 50, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'luz', nombre: 'LUZ', importe: 75, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'agua', nombre: 'AGUA', importe: 20, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'seguro_coche_moto', nombre: 'SEGURO COCHE/MOTO', importe: 100, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'gasolina', nombre: 'GASOLINA', importe: 400, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'comida', nombre: 'COMIDA', importe: 650, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'revisiones_coche', nombre: 'REVISIONES COCHE', importe: 100, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'milana', nombre: 'MILANA', importe: 70, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'extraescolares', nombre: 'EXTRAESCOLARES', importe: 160, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'dentista', nombre: 'DENTISTA', importe: 75, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'gs_rita', nombre: 'GS RITA', importe: 100, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'pena_zorrunos', nombre: 'PEÑA ZORRUNOS', importe: 160, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'sequra_netflix', nombre: 'SEQURA/NETFLIX', importe: 30, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'moto', nombre: 'MOTO', importe: 100, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'secadora', nombre: 'SECADORA', importe: 35, cobrado: false, notas: '', excelUrl: '' },
+      { id: 'armario_terraza', nombre: 'ARMARIO TERRAZA', importe: 50, cobrado: false, notas: '', excelUrl: '' }
+    ];
+
+    let estado = {
+      ingresos: [
+        { id: 'nom1', etiqueta: 'Nómina 1', importe: 1600 },
+        { id: 'nom2', etiqueta: 'Nómina 2', importe: 1200 },
+        { id: 'fn',   etiqueta: 'FN',       importe: 250 },
+        { id: 'invied', etiqueta: 'INVIED', importe: 150 }
+      ],
+      gastos: JSON.parse(JSON.stringify(GASTOS_BASE))
+    };
+
+    let idxDetalleSeleccionado = null;
+    let idxGastoEnEdicion = null;
+    let supabaseClient = null;
+
+    function initSupabase() {
+      const url = localStorage.getItem('gastos_supabase_url') || "https://sblkcunijuzyysjepcvl.supabase.co";
+      const key = localStorage.getItem('gastos_supabase_key') || "sb_publishable_E5AkHwNWuGvQlITYfl5z7g_mnqkdwbL";
+      
+      if (url && key && window.supabase) {
+        supabaseClient = window.supabase.createClient(url, key);
+        document.getElementById('estado-conexion').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> En Vivo (Nube)';
+        sincronizarSupabase();
+      }
+    }
+
+    async function sincronizarSupabase() {
+      if (!supabaseClient) return;
+      try {
+        const { data } = await supabaseClient.from('gastos_hogar').select('estado').eq('id', 1).single();
+        if (data && data.estado) {
+          estado = data.estado;
+          if (!estado.ingresos) {
+            estado.ingresos = [
+              { id: 'nom1', etiqueta: 'Nómina 1', importe: 1600 },
+              { id: 'nom2', etiqueta: 'Nómina 2', importe: 1200 },
+              { id: 'fn',   etiqueta: 'FN',       importe: 250 },
+              { id: 'invied', etiqueta: 'INVIED', importe: 150 }
+            ];
+          }
+          pintar();
+        }
+      } catch(e) { console.warn("Supabase fetch:", e); }
+
+      supabaseClient.channel('sync-gastos')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gastos_hogar' }, payload => {
+          if (payload.new && payload.new.estado) {
+            estado = payload.new.estado;
+            pintar();
+          }
+        }).subscribe();
+    }
+
+    async function guardar() {
+      localStorage.setItem('gastos_casa_local_v5', JSON.stringify(estado));
+      pintar();
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('gastos_hogar').update({ estado: estado }).eq('id', 1);
+        } catch(e) { console.error("Error sincronizando:", e); }
+      }
+    }
+
+    function formatoEuro(num) {
+      return Number(num || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+
+    function pintar() {
+      // 1. Ingresos
+      const gridIng = document.getElementById('grid-ingresos');
+      gridIng.innerHTML = '';
+      let totalIngresos = 0;
+
+      estado.ingresos.forEach((ing, iIdx) => {
+        totalIngresos += Number(ing.importe || 0);
+        const box = document.createElement('div');
+        box.className = 'bg-slate-900 p-2 rounded-xl border border-slate-700/60 cursor-pointer hover:border-emerald-400 transition';
+        box.onclick = () => editarIngresoIndividual(iIdx);
+        box.innerHTML = `
+          <div class="flex justify-between items-center text-[10px] text-slate-400">
+            <span>${ing.etiqueta}</span>
+            <span class="text-[9px] text-emerald-400">✏️</span>
+          </div>
+          <p class="text-sm font-bold text-white mt-0.5">${formatoEuro(ing.importe)}</p>
+        `;
+        gridIng.appendChild(box);
+      });
+      document.getElementById('txt-total-ingresos').textContent = formatoEuro(totalIngresos);
+
+      // 2. Gastos
+      const contenedor = document.getElementById('contenedor-gastos');
+      const selector = document.getElementById('sel-gasto-ajuste');
+      contenedor.innerHTML = '';
+      selector.innerHTML = '';
+
+      let totalEst = 0;
+      let totalCob = 0;
+
+      estado.gastos.forEach((g, idx) => {
+        totalEst += Number(g.importe || 0);
+        if (g.cobrado) totalCob += Number(g.importe || 0);
+
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-xl border flex justify-between items-center transition ${g.cobrado ? 'bg-slate-800/40 border-slate-700/40 opacity-75' : 'bg-slate-800 border-slate-700'}`;
+        card.innerHTML = `
+          <div class="flex items-center gap-2.5 flex-1 cursor-pointer" onclick="alternarCobro(${idx})">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${g.cobrado ? 'bg-emerald-500 text-slate-950' : 'border border-slate-600 text-transparent'}">✓</span>
+            <div>
+              <p class="text-xs font-bold ${g.cobrado ? 'line-through text-slate-400' : 'text-white'}">${g.nombre}</p>
+              <p class="text-[10px] text-slate-400">${g.cobrado ? 'Cobrado este mes' : 'Pendiente'}${g.notas ? ' • 📝 notas' : ''}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-extrabold mr-1 ${g.cobrado ? 'text-slate-500' : 'text-emerald-400'}">${formatoEuro(g.importe)}</span>
+            <button onclick="abrirModalDetalle(${idx})" title="Añadir notas o Excel" class="p-1 rounded bg-slate-900 border border-slate-700 hover:border-emerald-500 text-xs">📝</button>
+            <button onclick="abrirModalModificarGasto(${idx})" title="Modificar nombre o importe" class="p-1 rounded bg-slate-900 border border-slate-700 hover:border-sky-500 text-xs">✏️</button>
+            <button onclick="eliminarGasto(${idx})" title="Eliminar gasto si ya está pagado" class="p-1 rounded bg-slate-900 border border-slate-700 hover:border-rose-500 text-rose-400 text-xs">🗑️</button>
+          </div>
+        `;
+        contenedor.appendChild(card);
+
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = `${g.nombre} (${formatoEuro(g.importe)})`;
+        selector.appendChild(opt);
+      });
+
+      const remanenteActual = totalIngresos - totalCob;
+      const remanenteFinal = totalIngresos - totalEst;
+
+      document.getElementById('txt-presupuesto').textContent = formatoEuro(totalEst);
+      document.getElementById('txt-cobrado').textContent = formatoEuro(totalCob);
+      document.getElementById('txt-remanente-actual').textContent = formatoEuro(remanenteActual);
+      document.getElementById('txt-remanente-final').textContent = `Al terminar el mes quedarán: ${formatoEuro(remanenteFinal)}`;
+    }
+
+    function editarIngresoIndividual(idx) {
+      const ing = estado.ingresos[idx];
+      const res = prompt(`Nuevo importe para ${ing.etiqueta} (€):`, ing.importe);
+      if (res !== null) {
+        const val = parseFloat(res.replace(',', '.'));
+        if (!isNaN(val) && val >= 0) {
+          estado.ingresos[idx].importe = val;
+          guardar();
+        }
+      }
+    }
+
+    function alternarCobro(idx) {
+      estado.gastos[idx].cobrado = !estado.gastos[idx].cobrado;
+      guardar();
+    }
+
+    function aplicarCobroReal() {
+      const idx = document.getElementById('sel-gasto-ajuste').value;
+      const nuevoImp = parseFloat(document.getElementById('in-importe-ajuste').value.replace(',', '.'));
+      if (!isNaN(nuevoImp) && nuevoImp > 0) {
+        estado.gastos[idx].importe = nuevoImp;
+      }
+      estado.gastos[idx].cobrado = true;
+      guardar();
+      document.getElementById('in-importe-ajuste').value = '';
+      window.irA('gastos');
+    }
+
+    function abrirModalDetalle(idx) {
+      idxDetalleSeleccionado = idx;
+      const g = estado.gastos[idx];
+      document.getElementById('modal-titulo').textContent = `Detalle de ${g.nombre}`;
+      document.getElementById('modal-notas').value = g.notas || '';
+      document.getElementById('modal-link').value = g.excelUrl || '';
+
+      const btnLink = document.getElementById('btn-abrir-excel');
+      if (g.excelUrl) {
+        btnLink.href = g.excelUrl;
+        btnLink.classList.remove('hidden');
+      } else {
+        btnLink.classList.add('hidden');
+      }
+
+      document.getElementById('modal-detalle').classList.remove('hidden');
+    }
+
+    function cerrarModalDetalle() {
+      document.getElementById('modal-detalle').classList.add('hidden');
+      idxDetalleSeleccionado = null;
+    }
+
+    function guardarModalDetalle() {
+      if (idxDetalleSeleccionado === null) return;
+      estado.gastos[idxDetalleSeleccionado].notas = document.getElementById('modal-notas').value.trim();
+      estado.gastos[idxDetalleSeleccionado].excelUrl = document.getElementById('modal-link').value.trim();
+      guardar();
+      cerrarModalDetalle();
+    }
+
+    function abrirModalNuevoGasto() {
+      idxGastoEnEdicion = null;
+      document.getElementById('modal-gasto-titulo').textContent = "Añadir Nuevo Gasto";
+      document.getElementById('modal-gasto-nombre').value = "";
+      document.getElementById('modal-gasto-importe').value = "";
+      document.getElementById('modal-editar-gasto').classList.remove('hidden');
+    }
+
+    function abrirModalModificarGasto(idx) {
+      idxGastoEnEdicion = idx;
+      const g = estado.gastos[idx];
+      document.getElementById('modal-gasto-titulo').textContent = "Modificar Gasto";
+      document.getElementById('modal-gasto-nombre').value = g.nombre;
+      document.getElementById('modal-gasto-importe').value = g.importe;
+      document.getElementById('modal-editar-gasto').classList.remove('hidden');
+    }
+
+    function cerrarModalEditarGasto() {
+      document.getElementById('modal-editar-gasto').classList.add('hidden');
+      idxGastoEnEdicion = null;
+    }
+
+    function guardarEdicionGasto() {
+      const nombre = document.getElementById('modal-gasto-nombre').value.trim().toUpperCase();
+      const importe = parseFloat(document.getElementById('modal-gasto-importe').value.replace(',', '.'));
+
+      if (!nombre) { alert("Indica el nombre del gasto."); return; }
+      if (isNaN(importe) || importe < 0) { alert("Introduce un importe válido."); return; }
+
+      if (idxGastoEnEdicion === null) {
+        estado.gastos.push({
+          id: 'gasto_' + Date.now(),
+          nombre: nombre,
+          importe: importe,
+          cobrado: false,
+          notas: '',
+          excelUrl: ''
+        });
+      } else {
+        estado.gastos[idxGastoEnEdicion].nombre = nombre;
+        estado.gastos[idxGastoEnEdicion].importe = importe;
+      }
+
+      guardar();
+      cerrarModalEditarGasto();
+    }
+
+    function eliminarGasto(idx) {
+      const g = estado.gastos[idx];
+      if (confirm(`¿Quieres eliminar '${g.nombre}'?`)) {
+        estado.gastos.splice(idx, 1);
+        guardar();
+      }
+    }
+
+    function reiniciarMes() {
+      if (confirm('¿Reiniciar mes? Se desmarcarán todos los cobros pagados.')) {
+        estado.gastos.forEach(g => g.cobrado = false);
+        guardar();
+      }
+    }
+
+    function guardarConfiguracionSupabase() {
+      const url = document.getElementById('cfg-url').value.trim();
+      const key = document.getElementById('cfg-key').value.trim();
+      if (url && key) {
+        localStorage.setItem('gastos_supabase_url', url);
+        localStorage.setItem('gastos_supabase_key', key);
+        alert('Configuración guardada.');
+        location.reload();
+      }
+    }
+
+    const guardado = localStorage.getItem('gastos_casa_local_v5');
+    if (guardado) {
+      try { 
+        estado = JSON.parse(guardado);
+        if (!estado.ingresos) {
+          estado.ingresos = [
+            { id: 'nom1', etiqueta: 'Nómina 1', importe: 1600 },
+            { id: 'nom2', etiqueta: 'Nómina 2', importe: 1200 },
+            { id: 'fn',   etiqueta: 'FN',       importe: 250 },
+            { id: 'invied', etiqueta: 'INVIED', importe: 150 }
+          ];
+        }
+      } catch(e){}
+    }
+
+    pintar();
+    initSupabase();
+  </script>
+</body>
+</html>
